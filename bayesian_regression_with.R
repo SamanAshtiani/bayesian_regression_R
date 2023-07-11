@@ -173,17 +173,86 @@ dnorm(0,0,1)
 
 
 # 2) what is our likelihood?
+# Binomila(40, theta) if we assume that each question is independent and that probability a student gets a question right
+#is the same for all questions for that student
+
 # 3) what prior should we use?
-# 4) what is the prior probability? P(theta>0.25)  P(theta>0.5) P(theta>0.8)
+# the conjugate prior is a beta prior. plot the density with dbeta
+theta = seq(0,1, by=0.01)
+#theta
+#plot the default prior: beta(1,1) which is a uniform
+plot(theta,dbeta(theta,1,1), type="l") #all thetas are equally likely but it does not reflect our initial guess of >0.25
+#plot a beta distribution that has prior mean 2/3
+plot(theta, dbeta(theta, 4,2), type="l") # we still have some mass below 0.25
+# as we increase the parameter values, it increases the effect of sample sizes and concentrates the distribution
+plot(theta, dbeta(theta, 8,4), type="l") # a reasonable prior for our problem. majority of the mass is between 0.25 and 1
+
+# 4) what is the prior probabilities that the parameter s be > ...? P(theta>0.25)  P(theta>0.5) P(theta>0.8)
+#pbeta gives us the cumulative distribution function for the beta distri equal to less than that value
+#so we calculate 1-...
+#prior probabilities:
+1-pbeta(0.25, 8,4)
+0.99
+1-pbeta(0.5, 8,4)
+0.88
+1-pbeta(0.8, 8,4)
+0.16
+
 # 5) suppose the first student gets 33 questions right. what is the posterior distribution for theta1?
 #   what is a 95% posterior credible interval for theta1?
+beta(8+33, 4+40-33) # = beta(41,11)
+#posterior mean
+41/(41+11) #0.7
+#MLE
+33/40  #0.82
+plot(theta, dbeta(theta,41,11), type="l") #posterior, as we get more info the distri becomes more concentrated
+lines(theta,dbeta(theta, 8,4), lty=2) #prior
+#so the posterior mean is between MLE and prior of 2/3=0.66
+#let's add likelihood as well:
+lines(theta, dbinom(33,size=40, p=theta), lty=3) # on a different scale, we need to rescale it coz it does not have
+# a normalizing constant to make it a density
+lines(theta, 44*dbinom(33,size=40, p=theta), lty=3)
+#posterior(solid) and likelihood are close coz there's more info in the likelihood. we have 40 samples in the likelihood
+#and a prior with effective sample size of eight + 4 =12 so it makes sense that posterior be closer to the likelihood than
+#to the prior
+
+#posterior probabilities that theta1 > 1/4 
+1-pbeta(0.25,41,11)
+1-pbeta(0.5, 41,11)
+1-pbeta(0.8,41,11)  # 0.444 given that ??>> our data had a value >0.8   <<??now we are more confident that theta1 is a 
+#larger value compared with prior prob. of 0.16
+
+#get quantiles from beta distrib.there's a 95% posterior prob. that theta1 is bet 0.66 and 0.88, as evident in plot also
+qbeta(.028, 41,11) #0.67
+qbeta(.975, 41,11) #0.88
+
 # 6) suppose the second student gets 24 questions right. what is the posterior distribution for theta2?
 #    what is the 95% posterior credible interval for theta2?
+#posterior is Beta(8+24, 4+40-24) = Beta(32,20)
+32/(32+23) # 0.58 mea posterior
+24/40 #0.6 maximum likelihood
+
+plot(theta, dbeta(theta,32,20), type="l") #posterior
+lines(theta,dbeta(theta, 8,4), lty=2) #prior
+lines(theta, 44*dbinom(24,size=40, p=theta), lty=3)
+#again posterior is between likelihood and prior 
+#posterior mass is between .45 and 0.8
+
+#posterior probabilities that theta1 > 1/4 
+1-pbeta(0.25,32,20)
+1-pbeta(0.5, 32,20)
+1-pbeta(0.8,32,20)
+
+#95% equal tailed credible interval for theta2
+qbeta(0.025,32, 20) #.48
+qbeta(0.975,32,20) #.74
 # 7) what is the posterior probability that theta1 > theta2, ie the first student has a better chance to get
 #     the questions right than the second student
-#
-#
-
+#?? difficult to answer in closed form, let's answer it by simulation:
+#draw 1000 samples and from each posterior distribution to see how often we obser theta1>theta2
+theta1s <- rbeta(1000, 41,11)
+theta2s <- rbeta(1000, 32,20)
+mean(theta1s > theta2s) #.975
 
 
 
