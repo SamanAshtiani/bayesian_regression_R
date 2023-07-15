@@ -145,7 +145,106 @@ women_posterior[1, ]
 # 10       11       12       13       14       15 
 # 67.00500 67.70706 68.79224 69.39023 72.01883 73.13302 
 
-# Bernoulli probability distribution likelihood function:
+# Graphically compare the actual response values with the draws from posterior
+color_scheme_set("brightblue")
+library(bayesplot)
+ppc_dens_overlay(y, yrep = women_posterior[1:30,])
+
+# quadratic and cubic bayesian posterior predictive check ----
+model_Q <- stan_glm(formula = height ~ weight + I(weight^2),
+         data = women)
+
+print(model_Q)
+summary(model_Q) # Rhat 1 shows that model has converged
+women_posterior_Q <- posterior_predict(model_Q,
+                                       draws= 600)
+dim(women_posterior_Q) # 600  15
+
+ppc_dens_overlay(y, yrep = women_posterior_Q[1:30,])
+
+#cubic model
+model_cubic <- stan_glm(formula = height ~ weight + I(weight^2) + I(weight^3),
+                    data = women)
+women_posterior_cubic <- posterior_predict(model_cubic,
+                                           draws=600)
+ppc_dens_overlay(y, yrep = women_posterior_cubic[1:30,])
+
+# Hostogram of the posterior predictive distribution ----
+# model_A
+ppc_hist(y, yrep = women_posterior[1:30,])
+ppc_hist(y, yrep = women_posterior_Q[1:30,])
+
+# pp checks with boxplots:
+#linear model:
+pp_check(model_A,
+         plotfun = "boxplot",
+         nreps=10,
+         notch=FALSE)
+#quadratic model:
+pp_check(model_Q,
+         plotfun = "boxplot",
+         nreps=10,
+         notch=FALSE)
+
+# MCMC intervals, single variable ----
+#we make mcmc plots to see that for each draw from the posterior distribution, which produces all the vectors of
+#prediction of our response variables to visualize the uncertainty intervals, credible intervals and the mean of those
+#draws.
+#thicker line is 50% uncertainty and thinner is 90% uncertainty interval 
+#(can be changed in the mcmc_intervals function arguments)
+mcmc_intervals(model_A,
+               pars = "weight")
+mcmc_intervals(model_Q,
+               pars = "weight")
+
+# multivariable regression analysis in Bayesian framework ----
+data(state)
+dim(state.x77)
+head(state.x77)
+states <- state.x77[, c("Murder","Population", "Income", "Illiteracy", "Area")]
+class(states)
+states <- as.data.frame(states)
+class(states)
+#create multivariate regression model
+model_A_multi <- stan_glm(formula = Murder~Population + Income + Illiteracy + Area, 
+         data = states,
+         algorithm = "sampling") 
+summary(model_A_multi)
+prior_summary(model_A_multi)
+
+# MCMC intervals for multivariable bayesian regresson model ---- 
+#to find the credible intervals, median and mean of the response variables 
+#x axis is the slpe and three covariates have 0 slope, so can be omitted.
+mcmc_intervals(model_A_multi,
+               pars = c("Population", "Income", "Illiteracy", "Area")
+               )
+#credible interval 
+posterior_interval(model_A_multi,
+                   prob = 0.5,  # 50% inteval
+                   pars = "Illiteracy")
+
+
+# interaction terms in linear regression ----
+install.packages("effects")
+library(effects)
+#remove.packages("effects")
+data(mtcars)
+model_no_inter <- glm(mpg ~ hp + wt, data=mtcars)
+class(model_no_inter)
+summary(model_no_inter)
+model_inter <- glm(mpg ~ hp + wt + (hp:wt), 
+                      data=mtcars)
+class(model_inter)
+summary(model_inter)
+
+# wt:hp interactions visualization
+mean(mtcars$wt) #3.12
+sd(mtcars$wt) #0.97
+effect("hp:wt", model_inter, wt=c(3.21,2.21,4.21), vcov.=vcov)
+plot(effect("hp:wt", model_inter, list(wt=c(3.21,2.21,4.21)), vcov.=vcov),
+     multiline = TRUE)
+
+# Bernoulli probability distribution likelihood function ----
 
 likelihood = function(n,y,theta) {return(theta^y*(1-theta)^(n-y))}
 theta_set <- seq(0.01, 0.99, by=0.01)
@@ -260,18 +359,22 @@ mean(theta1s > theta2s) #.975
 # 23 previous space shuttle launches before the Challenger disaster
 # T is the temperature in Fahrenheit, I is the O-ring damage index
 
-oring=read.table("http://www.randomservices.org/random/data/Challenger2.txt",header=T)
+oring=read.table("./Challenger2.tsv", header = TRUE)
 attach(oring)
 #note: masking T=TRUE
+oring
 
-plot(T,I)
+class(oring$Index)
+class(oring$Temp)
 
-oring.lm=lm(I~T)
+plot(oring$Temp,oring$Index)
+
+oring.lm=lm(Index ~ Temp, data = oring)
 summary(oring.lm)
 
 # add fitted line to scatterplot
-lines(T,fitted(oring.lm))            
-# 95% posterior interval for the slope
+lines(oring$Temp,fitted(oring.lm))            
+# ??******* 95% posterior interval for the slope based on summary/Residual standard error/21 dgrees of freedom
 -0.24337 - 0.06349*qt(.975,21)
 -0.24337 + 0.06349*qt(.975,21)
 # note that these are the same as the frequentist confidence intervals
@@ -282,41 +385,86 @@ lines(T,fitted(oring.lm))
 18.36508-0.24337*31
 coef(oring.lm)
 coef(oring.lm)[1] + coef(oring.lm)[2]*31  
+# (Intercept)  #******** it actually means y_hat 
+# 10.82052
+
 
 # posterior prediction interval (same as frequentist)
-predict(oring.lm,data.frame(T=31),interval="predict")  
-10.82052-2.102*qt(.975,21)*sqrt(1+1/23+((31-mean(T))^2/22/var(T)))
+new_dat <- data.frame(Temp=31)
+predict(oring.lm,newdata=new_dat)
+predict(oring.lm,new_dat ,interval="predict")  
+10.82052-2.102*qt(.975,21)*sqrt(1+1/23+((31-mean(oring$Temp))^2/22/var(oring$Temp)))
 
-# posterior probability that damage index is greater than zero
-1-pt((0-10.82052)/(2.102*sqrt(1+1/23+((31-mean(T))^2/22/var(T)))),21)
+# Do some Bayesian stuff:
+# ??posterior probability that damage index is greater than zero
+# ??waht's the probability of a t with the given center and scale
+1-pt((0-10.82052)/(2.102*sqrt(1+1/23+((31-mean(oring$Temp))^2/22/var(oring$Temp)))), 21) #
 
 
-http://www.randomservices.org/random/data/Galton.txt
+
 # Galton's seminal data on predicting the height of children from the 
 # heights of the parents, all in inches
 
-heights=read.table("http://www.randomservices.org/random/data/Galton.txt",header=T)
+heights <- read.table("./Galton.txt", header = TRUE)
+
+head(heights)
 attach(heights)
-names(heights)
+class(heights)
+
+heights <- lapply(heights, as.numeric)
+# library(dplyr)
+# heights <- mutate_all(heights, function(x) as.numeric(x))
 
 pairs(heights)
+View(heights)
+str(heights)
+n="Family"
+library(stringr)
+
+for(n in colnames(heights)) {
+  #n <- str_sub(n,2,-2 )
+  if(!is.numeric(heights[[n]])) {
+    #print(head(heights[[n]]))
+    heights[[n]] <- as.numeric(heights[[n]])
+  }
+    
+}
+
+print(heights[[n]])
+
+heights$Family
+
 summary(lm(Height~Father+Mother+Gender+Kids))
 summary(lm(Height~Father+Mother+Gender))
+#omit Kids coz the stderr is close to the estimate
 heights.lm=lm(Height~Father+Mother+Gender)
 
+# Coefficients:
+#   Estimate Std. Error t value Pr(>|t|)    
+# (Intercept) 15.34476    2.74696   5.586 3.08e-08 ***
+#   Father       0.40598    0.02921  13.900  < 2e-16 ***
+#   Mother       0.32150    0.03128  10.277  < 2e-16 ***
+#   GenderM      5.22595    0.14401  36.289  < 2e-16 ***
+#   ---
+#   Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+# 
+# Residual standard error: 2.154 on 894 degrees of freedom
+
 # each extra inch taller a father is is correlated with 0.4 inch extra
-height in the child
+
 # each extra inch taller a mother is is correlated with 0.3 inch extra
-height in the child
-# a male child is on average 5.2 inches taller than a female child
+
+#****  a male child is on average 5.2 inches taller than a female child (look at the summary)
 # 95% posterior interval for the the difference in height by gender
 5.226 - 0.144*qt(.975,894)
 5.226 + 0.144*qt(.975,894)
-
+ 
 # posterior prediction interval (same as frequentist)
+# what's the predicted height and 95% probability interval for a child's height given the covariate values. 
 predict(heights.lm,data.frame(Father=68,Mother=64,Gender="M"),interval="predict")
 predict(heights.lm,data.frame(Father=68,Mother=64,Gender="F"),interval="predict")
 
+#Bayesian apporach facilitates quantification of uncertainty   
 
 
 
