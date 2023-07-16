@@ -1,6 +1,8 @@
 setwd("~/git/bayesian_regression_R/")
 
+
 #warm-up on non-bayesian regression
+#use rstanarm and rstantools vignettes
 data(women)
 force(women)
 x <- women$weight
@@ -243,6 +245,140 @@ sd(mtcars$wt) #0.97
 effect("hp:wt", model_inter, wt=c(3.21,2.21,4.21), vcov.=vcov)
 plot(effect("hp:wt", model_inter, list(wt=c(3.21,2.21,4.21)), vcov.=vcov),
      multiline = TRUE)
+
+# importance sampling and weights diagnostics ----
+#extracting importance weights:
+install.packages("diagis")
+library(diagis)
+#Gamma distributioin
+x <- rgamma(20000,1,0.7)
+class(x)
+plot(x)
+summary(x)
+dim(x)
+length(x)
+#True distributioni
+p_x <- dgamma(x, 2, 1)
+class(p_x)
+plot(p_x)
+summary(p_x)
+
+#proposal distributioni 
+q_x <- dgamma(x,1,0.5)
+summary(q_x)
+
+#weight samples
+w_x <- p_x/q_x
+summary(w_x)
+weighted_mean(x,w_x)
+weight_plot(w_x)
+plot(density(w_x))
+
+# pointwise log likelihood ----
+#pareto smooth importance sampling
+library("loo")  #leave one out to compare the methods
+library(rstantools)
+lik_woman_A <- log_lik(model_A, data=women)  
+#creates an object from pointwise log likelihood whic is the prediction from each 
+#single object(regression model)
+dim(lik_woman_A)  #4000   15  four chains each 1000 samples drawn from posterior distribution
+class(lik_woman_A) #matrix-array
+#effective sample size
+n_eff <- relative_eff(exp(lik_woman_A),
+                      chain_id = rep(1:4,each=1000))
+n_eff
+# to fit a pareto distribution to our importance weight distribution
+log_ratios <- -1*lik_woman_A   #inverted model is needed for psis
+psis_women <- psis(log_ratios,
+     r_eff = n_eff)
+class(psis_women)
+weight_smooth <- weights.importance_sampling(psis_women)
+dim(weight_smooth)  #4000 15
+plot(weight_smooth)
+
+plot(psis_women$log_weights)
+dev.off()
+
+psis_women$diagnostics
+plot(psis_women$diagnostics$pareto_k)  #pareto k or= alpha shape parameters
+
+pareto_k_table(psis_women)
+
+pareto_k_values(psis_women)
+
+# predictive accuracy measure of your model----
+#measure some characteristics of your model regarding the accuracy of your model, here predictive power
+# y=beta_0 + sigma_i_to_N(beta_i*x_i)
+# p(y_^_i_1_to_13 | y) = probability of a future value, i.e. 13 newly arrived woman's height
+#given the observed heights of prior 15 women. it will be a pointwise estimation
+# the expected log proability density (elpd) = integ{p(y_^_i)* log(p(y_^_i | y)) dy_i}
+#?? is the formula right with both sigma and integral
+
+# leave one out cross validation----
+loo_women <- loo(model_A,
+    save_psis = TRUE)
+
+print(loo_women)
+#log of a number [0,1] is negative, and since elpd has log likelihood,it's negative 
+# p_loo indicates the effective number of parameters in our model: beta_0 and beta_1
+plot(loo_women)
+
+# Model comparison----
+library(rstanarm)
+model_no_inter_bayesian <- stan_glm(mpg ~ hp + wt,
+                                    data = mtcars)
+model_with_inter_bayesian <- stan_glm(mpg ~ hp + wt + hp:wt,
+                                      data = mtcars)
+
+# the best model appears on the first row and all other models including itself are subtracted from the 
+#values of the first row, hence the 0s:
+loo_compare(loo(model_no_inter_bayesian, save_psis = TRUE),
+            loo(model_with_inter_bayesian, save_psis = TRUE))
+
+# Predictive check loo_overlay----
+#graphical validation
+loo_with_inter <- loo(model_with_inter_bayesian,
+    save_psis = TRUE)
+
+loo_no_inter <- loo(model_no_inter_bayesian,
+                      save_psis = TRUE)
+
+library(bayesplot)
+ppc_loo_pit_overlay(model_no_inter_bayesian$y,
+                    posterior_predict(model_no_inter_bayesian),
+                    lw = weights(loo_no_inter$psis_object))
+
+ppc_loo_pit_overlay(model_with_inter_bayesian$y,
+                    posterior_predict(model_with_inter_bayesian),
+                    lw = weights(loo_with_inter$psis_object))
+
+# prediction with new data----
+head(mtcars,2)
+new_data <- data.frame(hp=120, wt=3.2)
+new_data
+# predict
+predict_new_car <- posterior_predict(model_with_inter_bayesian,
+                  newdata = new_data)
+dim(predict_new_car)
+# 4000 predicted mpg's for a car after sampling from the posterior distribution
+predict_new_car[1:5,]
+
+# plotting the uncertainty----
+install.packages("ggiraph")
+library(ggiraph)
+
+devtools::install_github("cardiomoon/ggiraphExtra")
+library(ggiraphExtra)
+
+library(plyr)
+library(ggplot2)
+
+ggplot(women, aes(women$weight, women$height)) + geom_point() +
+  geom_smooth(method = "stan_glm")
+
+ggPredict(model_A,
+          se = TRUE,
+          interactive = TRUE)
 
 # Bernoulli probability distribution likelihood function ----
 
